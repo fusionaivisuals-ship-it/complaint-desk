@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude PR review scratch file (CI)
+.claude-review.md
+# Claude Code personal settings
+.claude/settings.local.json

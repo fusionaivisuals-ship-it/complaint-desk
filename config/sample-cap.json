@@ -1,0 +1,4 @@
+{
+  "sampleCap": 1000,
+  "_note": "Maximum number of complaints any script may load or send to a model. Read via src/lib/sample-cap.ts. Raise it only on purpose: edit this value (Claude Code asks first) or pass an explicit override. See DECISIONS.md D2."
+}

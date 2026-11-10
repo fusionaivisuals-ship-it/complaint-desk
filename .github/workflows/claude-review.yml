@@ -1,0 +1,71 @@
+# Automated PR review with Claude Code (DECISIONS.md D1).
+# Runs non-interactively on every PR. The review scope comes from CLAUDE.md:
+# correctness + security + project rules R1–R6. It deliberately ignores formatting/lint noise.
+# Syntax follows code.claude.com/docs/en/github-actions (anthropics/claude-code-action@v1).
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+# One review per PR at a time; a new push cancels the stale run.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      id-token: write # required for the action's Claude GitHub App authentication
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: |
+            --max-turns 25
+            --allowedTools "Read,Glob,Grep,Write,Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr comment:*)"
+          prompt: |
+            You are the automated reviewer for ${{ github.repository }}, pull request #${{ github.event.pull_request.number }}.
+
+            1. Read CLAUDE.md. Its "Working rules" (R1–R6) and "PR review scope" define what you check.
+            2. Run `gh pr view ${{ github.event.pull_request.number }}` and `gh pr diff ${{ github.event.pull_request.number }}`. Open changed files with Read when you need surrounding context.
+            3. Check ONLY:
+               - Correctness: bugs, logic errors, broken behaviour.
+               - Security: committed secrets, injection, unsafe handling of input or credentials.
+               - Project rules R1–R6 from CLAUDE.md. R1 (the sample cap) matters most: any hardcoded row/batch limit, silent clamping, or limit not obtained from resolveSampleLimit() is a blocking finding.
+            4. Deliberately IGNORE: formatting, lint and style; naming preferences; package-lock.json; build output; wording nitpicks. Do not praise and do not summarise the PR. If you are unsure whether something is a real problem, leave it out.
+            5. Use the Write tool to save the review to `.claude-review.md`, using EXACTLY this structure:
+
+               ## 🤖 Claude review: <✅ No blocking issues | ❌ Changes requested>
+               **Checked:** correctness · security · CLAUDE.md rules R1–R6  ·  **Ignored by design:** formatting, lint, lockfiles, build output, nitpicks
+
+               ### Blocking
+               | # | Type | Location | Problem | Rule / fix |
+               |---|------|----------|---------|------------|
+               (one row per finding; Type is Correctness, Security or Rule Rn; Location is `path:line`. Write "None." instead of the table if there are none.)
+
+               ### Should fix
+               (same table format, for real but non-blocking issues, or "None.")
+
+               ### Rule check
+               | Rule | Result |
+               |------|--------|
+               | R1 Sample cap | ✅ pass / ❌ fail / — not touched |
+               | R2 Secrets | … |
+               | R3 Stage scope | … |
+               | R4 Guardrail files | … |
+               | R5 Errors | … |
+               | R6 Tests | … |
+
+            6. Post it with: `gh pr comment ${{ github.event.pull_request.number }} --body-file .claude-review.md`
+            Post exactly one comment. Do not modify any other file.
